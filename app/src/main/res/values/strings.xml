@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FocusLock</string>
+    <string name="lock_button">Lock phone now</string>
+    <string name="locked">Locked</string>
+    <string name="enable_accessibility">Please enable the FocusLock accessibility service to allow locking.</string>
+    <string name="status_free">Choose the lock duration in minutes, then tap the button. Once started, the lock cannot be cancelled.</string>
+    <string name="status_locked">Phone is locked for %d:%02d more</string>
+</resources>
