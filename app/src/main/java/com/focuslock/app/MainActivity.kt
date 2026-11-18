@@ -89,6 +89,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LockAccessibilityService.init(this)
         prefs = getSharedPreferences("focuslock_ui", Context.MODE_PRIVATE)
         minutes = prefs.getInt("minutes", 25).coerceIn(1, MAX_MIN)
         window.statusBarColor = C.BG
