@@ -28,6 +28,8 @@ class LockService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Load the saved lock first. Without this, a restarted service would think nothing is locked.
+        LockAccessibilityService.init(this)
         createChannel()
         startForeground(notifyId, buildNotification())
         handler.post(ticker)
