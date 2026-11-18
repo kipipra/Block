@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -83,10 +84,11 @@ class LockAccessibilityService : AccessibilityService() {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val v = TextView(this).apply {
             text = remainingText()
-            setTextColor(Color.WHITE)
+            setTextColor(Color.parseColor("#E0B04F"))
+            typeface = Typeface.MONOSPACE
             textSize = 30f
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#E6101018"))
+            setBackgroundColor(Color.parseColor("#F50B0E14"))
         }
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
