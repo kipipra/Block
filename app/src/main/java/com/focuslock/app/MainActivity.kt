@@ -9,6 +9,7 @@ import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
@@ -25,7 +26,10 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.BaseAdapter
 import android.widget.Button
+import android.widget.CheckedTextView
+import android.widget.ListView
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -76,6 +80,7 @@ class MainActivity : Activity() {
     private lateinit var hoursIn: EditText
     private lateinit var minsIn: EditText
     private lateinit var lockBtn: Button
+    private lateinit var allowedSummary: TextView
     private val presetBtns = ArrayList<Button>()
 
     private val ticker = object : Runnable {
@@ -234,6 +239,16 @@ class MainActivity : Activity() {
         helper = text("", 13f, C.MUTED, center = true)
         setupBox.addView(helper, lp(10))
 
+        // allowed apps
+        setupBox.addView(text("APPS ALLOWED WHILE LOCKED", 12f, C.MUTED, bold = true), lp(28))
+        allowedSummary = text("", 14f, C.FG)
+        setupBox.addView(allowedSummary, lp(10))
+        val pickBtn = button("Choose apps (max 6)", C.SURFACE2, C.FG)
+        pickBtn.setOnClickListener { dropFocus(); showAppPicker() }
+        setupBox.addView(pickBtn, lp(10))
+        setupBox.addView(text("Phone calls always work. The apps you pick stay usable during the lock and can only be changed before it starts.", 13f, C.MUTED), lp(8))
+        refreshAllowedSummary()
+
         lockBtn = button("Lock", C.ACCENT, C.INK)
         lockBtn.setOnClickListener { onLockClicked() }
         setupBox.addView(lockBtn, lp(24))
@@ -341,6 +356,81 @@ class MainActivity : Activity() {
         }
         root.requestFocus()
         applyMinutes(minutes, fields = true, slider = true)
+    }
+
+    // ------------------------------------------------------------------ allowed apps
+
+    private class AppItem(val pkg: String, val label: String, val icon: Drawable)
+
+    private fun launchableApps(): List<AppItem> {
+        val pm = packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return pm.queryIntentActivities(intent, 0)
+            .map { AppItem(it.activityInfo.packageName, it.loadLabel(pm).toString(), it.loadIcon(pm)) }
+            .filter { it.pkg != packageName }
+            .distinctBy { it.pkg }
+            .sortedBy { it.label.lowercase(Locale.ROOT) }
+    }
+
+    private fun refreshAllowedSummary() {
+        val pm = packageManager
+        val names = LockAccessibilityService.allowedApps.mapNotNull {
+            try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (_: Exception) { null }
+        }
+        allowedSummary.text = if (names.isEmpty()) "None. Only phone calls will work." else names.joinToString(", ")
+    }
+
+    private fun showAppPicker() {
+        if (LockAccessibilityService.isLocked()) return
+        val apps = launchableApps()
+        val chosen = LinkedHashSet<String>(LockAccessibilityService.allowedApps)
+        val max = LockAccessibilityService.MAX_ALLOWED
+        val iconSize = dp(36)
+
+        val list = ListView(this)
+        list.adapter = object : BaseAdapter() {
+            override fun getCount() = apps.size
+            override fun getItem(i: Int) = apps[i]
+            override fun getItemId(i: Int) = i.toLong()
+            override fun getView(i: Int, convert: View?, parent: ViewGroup?): View {
+                val v = (convert as? CheckedTextView) ?: CheckedTextView(this@MainActivity).apply {
+                    setTextColor(C.FG)
+                    textSize = 16f
+                    gravity = Gravity.CENTER_VERTICAL
+                    compoundDrawablePadding = dp(14)
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                }
+                val a = apps[i]
+                v.text = a.label
+                val d = a.icon.constantState?.newDrawable()?.mutate() ?: a.icon
+                d.setBounds(0, 0, iconSize, iconSize)
+                v.setCompoundDrawables(d, null, null, null)
+                v.text = (if (a.pkg in chosen) "\u2713  " else "      ") + a.label
+                v.setTextColor(if (a.pkg in chosen) C.ACCENT else C.FG)
+                return v
+            }
+        }
+        list.setOnItemClickListener { _, _, pos, _ ->
+            val pkg = apps[pos].pkg
+            if (pkg in chosen) {
+                chosen.remove(pkg)
+            } else if (chosen.size >= max) {
+                Toast.makeText(this, "You can pick up to $max apps.", Toast.LENGTH_SHORT).show()
+            } else {
+                chosen.add(pkg)
+            }
+            (list.adapter as BaseAdapter).notifyDataSetChanged()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Allowed apps (max $max)")
+            .setView(list)
+            .setPositiveButton("Save") { _, _ ->
+                LockAccessibilityService.allowedApps = chosen.toList()
+                refreshAllowedSummary()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // ------------------------------------------------------------------ locking
