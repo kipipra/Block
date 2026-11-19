@@ -243,7 +243,7 @@ class MainActivity : Activity() {
         setupBox.addView(text("APPS ALLOWED WHILE LOCKED", 12f, C.MUTED, bold = true), lp(28))
         allowedSummary = text("", 14f, C.FG)
         setupBox.addView(allowedSummary, lp(10))
-        val pickBtn = button("Choose apps (max 6)", C.SURFACE2, C.FG)
+        val pickBtn = button("Choose apps (up to 6)", C.SURFACE2, C.FG)
         pickBtn.setOnClickListener { dropFocus(); showAppPicker() }
         setupBox.addView(pickBtn, lp(10))
         setupBox.addView(text("Phone calls always work. The apps you pick stay usable during the lock and can only be changed before it starts.", 13f, C.MUTED), lp(8))
@@ -372,32 +372,22 @@ class MainActivity : Activity() {
             .sortedBy { it.label.lowercase(Locale.ROOT) }
     }
 
-private fun refreshAllowedSummary() {
-    val pm = packageManager
-    val names = LockAccessibilityService.getAllowedApps(this).mapNotNull {
-        try {
-            pm.getApplicationLabel(
-                pm.getApplicationInfo(it, 0)
-            ).toString()
-        } catch (_: Exception) {
-            null
+    private fun refreshAllowedSummary() {
+        val pm = packageManager
+        val names = LockAccessibilityService.allowedApps.mapNotNull {
+            try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (_: Exception) { null }
         }
+        allowedSummary.text = if (names.isEmpty()) "None. Only phone calls will work." else names.joinToString(", ")
     }
-
-    allowedSummary.text =
-        if (names.isEmpty()) "None. Only phone calls will work."
-        else names.joinToString(", ")
-}
 
     private fun showAppPicker() {
         if (LockAccessibilityService.isLocked()) return
         val apps = launchableApps()
-        val chosen = LinkedHashSet<String>(
-    LockAccessibilityService.getAllowedApps(this)
-)
-val max = 6
+        val chosen = LinkedHashSet<String>(LockAccessibilityService.allowedApps)
+        val max = LockAccessibilityService.MAX_ALLOWED
         val iconSize = dp(36)
 
+        var dialog: AlertDialog? = null
         val list = ListView(this)
         list.adapter = object : BaseAdapter() {
             override fun getCount() = apps.size
@@ -430,17 +420,17 @@ val max = 6
             } else {
                 chosen.add(pkg)
             }
+            // Saved on every tap, so closing the dialog any way never loses the choice.
+            LockAccessibilityService.allowedApps = chosen.toList()
+            refreshAllowedSummary()
+            dialog?.setTitle("Allowed apps (" + chosen.size + " of $max)")
             (list.adapter as BaseAdapter).notifyDataSetChanged()
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("Allowed apps (max $max)")
+        dialog = AlertDialog.Builder(this)
+            .setTitle("Allowed apps (" + chosen.size + " of $max)")
             .setView(list)
-            .setPositiveButton("Save") { _, _ ->
-                LockAccessibilityService.saveAllowedApps(this, chosen)
-                refreshAllowedSummary()
-            }
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Done", null)
             .show()
     }
 
