@@ -64,6 +64,12 @@ class LockAccessibilityService : AccessibilityService() {
                 prefs?.edit()?.putString("allowed", value.distinct().take(MAX_ALLOWED).joinToString(","))?.apply()
             }
 
+        /** System helper screens apps use for permissions, file pickers and share sheets. Never blocked. */
+        private val HELPER_PACKAGES = setOf(
+            "android", "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+            "com.android.documentsui", "com.google.android.documentsui", "com.android.intentresolver"
+        )
+
         /** Phone / in-call screens. Always usable so calls can be answered and ended. */
         private val CALL_PACKAGES = setOf(
             "com.android.dialer", "com.google.android.dialer", "com.android.incallui",
@@ -121,40 +127,84 @@ class LockAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Blocking is delayed a moment and cancelled when an allowed app shows up. Without this, the
+    // noise from the launch animation (launcher, System UI, the old app) sent the user home again.
+    private var enforce: Runnable? = null
+    private var pendingLevel = -1
+    private var graceUntil = 0L
+
+    private fun cancelEnforce() {
+        enforce?.let { handler.removeCallbacks(it) }
+        enforce = null
+        pendingLevel = -1
+    }
+
+    /** level: 0 = launcher, 1 = System UI popup, 2 = another app. A higher level replaces a lower one. */
+    private fun scheduleEnforce(level: Int, action: () -> Unit) {
+        if (enforce != null && pendingLevel >= level) return
+        cancelEnforce()
+        pendingLevel = level
+        val wait = maxOf(450L, graceUntil - SystemClock.uptimeMillis())
+        val r = Runnable {
+            enforce = null
+            pendingLevel = -1
+            if (isLocked()) action()
+        }
+        enforce = r
+        handler.postDelayed(r, wait)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!isLocked()) return
         val pkg = event?.packageName?.toString() ?: return
-        if (pkg == packageName) return
-        if (pkg == launcherPackage) {
-            // Home screen: show the lock screen, which lists the allowed apps.
-            showOverlay()
+        if (pkg == packageName) {
+            cancelEnforce()
             return
         }
-        // Apps the user picked, and phone / call screens: let them through.
+        // Keyboards and permission / picker screens must work inside allowed apps.
+        if (pkg in HELPER_PACKAGES || pkg in inputMethodPackages()) return
+
+        // An allowed app (or a call screen) is in front: cancel any pending block and show it.
         if (pkg in allowedApps || pkg in callPackages()) {
+            cancelEnforce()
             removeOverlay()
             return
         }
-        // Keyboards must work inside allowed apps.
-        if (pkg in inputMethodPackages()) return
-        if (pkg.contains("systemui")) {
+
+        val isLauncher = pkg == launcherPackage
+        val isSysUi = pkg.contains("systemui")
+
+        // Right after an allowed app was launched, the launcher and System UI report window changes
+        // as part of the animation. Ignore them.
+        if (SystemClock.uptimeMillis() < graceUntil && (isLauncher || isSysUi)) return
+
+        if (isLauncher) {
+            // Home screen: show the lock screen, which lists the allowed apps.
+            scheduleEnforce(0) { showOverlay() }
+            return
+        }
+        if (isSysUi) {
             // While a call is ringing or active, leave System UI alone so the call can be answered.
             if (isCallActive()) return
-            // The power menu (Power off / Restart) is drawn by System UI. Close it, and any other
-            // System UI popup, but leave the unlock screen and volume alone.
             val cls = event.className?.toString()?.lowercase(Locale.ROOT) ?: ""
-            val power = looksLikePowerMenu(cls, event)
-            val benign = BENIGN_UI.any { cls.contains(it) }
-            if (power || (!benign && SystemClock.uptimeMillis() - lastCloseAt > 1500L)) {
+            // The power menu must be closed at once.
+            if (looksLikePowerMenu(cls, event)) {
                 closeSystemPopup()
+                return
+            }
+            if (BENIGN_UI.any { cls.contains(it) }) return
+            scheduleEnforce(1) {
+                if (SystemClock.uptimeMillis() - lastCloseAt > 1500L) closeSystemPopup()
             }
             return
         }
-        // An app tried to come to the foreground: send the user back home
+        // Some other app tried to come to the foreground: send the user back home
         // and cover the screen so nothing can be used.
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        performGlobalAction(GLOBAL_ACTION_BACK)
-        showOverlay()
+        scheduleEnforce(2) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            showOverlay()
+        }
     }
 
     private fun isCallActive(): Boolean {
@@ -320,12 +370,16 @@ class LockAccessibilityService : AccessibilityService() {
     private fun launchAllowed(pkg: String) {
         val i = packageManager.getLaunchIntentForPackage(pkg) ?: return
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        graceUntil = SystemClock.uptimeMillis() + 2500L
+        cancelEnforce()
         try {
             startActivity(i)
         } catch (_: Exception) {
+            graceUntil = 0L
             return
         }
-        removeOverlay()
+        // The overlay is removed as soon as the app reports its window. This is a fallback.
+        handler.postDelayed({ if (isLocked() && SystemClock.uptimeMillis() >= graceUntil - 500L) removeOverlay() }, 2000L)
     }
 
     private fun removeOverlay() {
