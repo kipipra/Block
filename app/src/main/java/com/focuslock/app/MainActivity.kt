@@ -372,19 +372,30 @@ class MainActivity : Activity() {
             .sortedBy { it.label.lowercase(Locale.ROOT) }
     }
 
-    private fun refreshAllowedSummary() {
-        val pm = packageManager
-        val names = LockAccessibilityService.allowedApps.mapNotNull {
-            try { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() } catch (_: Exception) { null }
+private fun refreshAllowedSummary() {
+    val pm = packageManager
+    val names = LockAccessibilityService.getAllowedApps(this).mapNotNull {
+        try {
+            pm.getApplicationLabel(
+                pm.getApplicationInfo(it, 0)
+            ).toString()
+        } catch (_: Exception) {
+            null
         }
-        allowedSummary.text = if (names.isEmpty()) "None. Only phone calls will work." else names.joinToString(", ")
     }
+
+    allowedSummary.text =
+        if (names.isEmpty()) "None. Only phone calls will work."
+        else names.joinToString(", ")
+}
 
     private fun showAppPicker() {
         if (LockAccessibilityService.isLocked()) return
         val apps = launchableApps()
-        val chosen = LinkedHashSet<String>(LockAccessibilityService.allowedApps)
-        val max = LockAccessibilityService.MAX_ALLOWED
+        val chosen = LinkedHashSet<String>(
+    LockAccessibilityService.getAllowedApps(this)
+)
+val max = 6
         val iconSize = dp(36)
 
         val list = ListView(this)
