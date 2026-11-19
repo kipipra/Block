@@ -437,7 +437,7 @@ val max = 6
             .setTitle("Allowed apps (max $max)")
             .setView(list)
             .setPositiveButton("Save") { _, _ ->
-                LockAccessibilityService.allowedApps = chosen.toList()
+                LockAccessibilityService.saveAllowedApps(this, chosen)
                 refreshAllowedSummary()
             }
             .setNegativeButton("Cancel", null)
