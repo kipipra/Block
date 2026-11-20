@@ -88,6 +88,14 @@ class LockAccessibilityService : AccessibilityService() {
 
         /** System UI popups that must never be closed while locked (unlock screen, volume). */
         private val BENIGN_UI = listOf("keyguard", "bouncer", "lockscreen", "biometric", "fingerprint", "volume", "toast")
+        /** System UI windows worth closing even while an allowed app is open (notification shade, quick settings, recents). */
+        private val RISKY_UI = listOf("shade", "notification", "panel", "statusbar", "quicksetting", "qspanel", "controlcenter", "recent", "overview", "assist")
+
+        /** Debug aid: what the lock blocked last, shown on the main screen. */
+        var lastBlocked: String
+            get() = prefs?.getString("lastBlocked", "") ?: ""
+            set(value) { prefs?.edit()?.putString("lastBlocked", value)?.apply() }
+
         private val POWER_CLASS = listOf("globalactions", "poweroff", "powermenu", "shutdown", "reboot", "restart")
         private val POWER_TEXT = listOf("power off", "restart", "reboot", "shut down", "switch off", "power menu")
     }
@@ -186,6 +194,7 @@ class LockAccessibilityService : AccessibilityService() {
 
         val isLauncher = pkg == launcherPackage
         val isSysUi = pkg.contains("systemui")
+        val cls = event.className?.toString()?.lowercase(Locale.ROOT) ?: ""
 
         // A built-in system app (camera, photo picker, gallery, Google app...) opened from inside an
         // allowed app, for example when you tap + or the mic in Gemini. Let it through. Browsers,
@@ -208,21 +217,28 @@ class LockAccessibilityService : AccessibilityService() {
         if (isSysUi) {
             // While a call is ringing or active, leave System UI alone so the call can be answered.
             if (isCallActive()) return
-            val cls = event.className?.toString()?.lowercase(Locale.ROOT) ?: ""
             // The power menu must be closed at once.
             if (looksLikePowerMenu(cls, event)) {
+                lastBlocked = "$pkg / $cls (power menu)"
                 closeSystemPopup()
                 return
             }
             if (BENIGN_UI.any { cls.contains(it) }) return
+            // Typing, the keyboard and many in-app popups make System UI report windows too. While an
+            // allowed app is open, only close the notification shade, quick settings and recents.
+            if (chainOk && RISKY_UI.none { cls.contains(it) }) return
             scheduleEnforce(1) {
-                if (SystemClock.uptimeMillis() - lastCloseAt > 1500L) closeSystemPopup()
+                if (SystemClock.uptimeMillis() - lastCloseAt > 1500L) {
+                    lastBlocked = "$pkg / $cls"
+                    closeSystemPopup()
+                }
             }
             return
         }
         // Some other app tried to come to the foreground: send the user back home
         // and cover the screen so nothing can be used.
         scheduleEnforce(2) {
+            lastBlocked = "$pkg / $cls"
             chainOk = false
             performGlobalAction(GLOBAL_ACTION_HOME)
             performGlobalAction(GLOBAL_ACTION_BACK)
