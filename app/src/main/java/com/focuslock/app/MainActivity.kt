@@ -81,6 +81,7 @@ class MainActivity : Activity() {
     private lateinit var minsIn: EditText
     private lateinit var lockBtn: Button
     private lateinit var allowedSummary: TextView
+    private lateinit var lastBlockedView: TextView
     private val presetBtns = ArrayList<Button>()
 
     private val ticker = object : Runnable {
@@ -106,6 +107,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        refreshLastBlocked()
         handler.post(ticker)
     }
 
@@ -248,8 +250,9 @@ class MainActivity : Activity() {
         setupBox.addView(pickBtn, lp(10))
         setupBox.addView(text("Phone calls always work. The apps you pick stay usable during the lock and can only be changed before it starts.", 13f, C.MUTED), lp(8))
         refreshAllowedSummary()
-        val lb = LockAccessibilityService.lastBlocked
-        if (lb.isNotEmpty()) setupBox.addView(text("Last blocked: $lb", 12f, C.MUTED), lp(14))
+        lastBlockedView = text("", 12f, C.MUTED)
+        setupBox.addView(lastBlockedView, lp(14))
+        refreshLastBlocked()
 
         lockBtn = button("Lock", C.ACCENT, C.INK)
         lockBtn.setOnClickListener { onLockClicked() }
@@ -372,6 +375,11 @@ class MainActivity : Activity() {
             .filter { it.pkg != packageName }
             .distinctBy { it.pkg }
             .sortedBy { it.label.lowercase(Locale.ROOT) }
+    }
+
+    private fun refreshLastBlocked() {
+        val lb = LockAccessibilityService.lastBlocked
+        lastBlockedView.text = "Last blocked: " + (if (lb.isEmpty()) "nothing yet" else lb)
     }
 
     private fun refreshAllowedSummary() {
