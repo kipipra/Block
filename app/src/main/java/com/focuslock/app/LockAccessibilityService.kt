@@ -68,7 +68,9 @@ class LockAccessibilityService : AccessibilityService() {
         /** System helper screens apps use for permissions, file pickers and share sheets. Never blocked. */
         private val HELPER_PACKAGES = setOf(
             "android", "com.android.permissioncontroller", "com.google.android.permissioncontroller",
-            "com.android.documentsui", "com.google.android.documentsui", "com.android.intentresolver"
+            "com.android.documentsui", "com.google.android.documentsui", "com.android.intentresolver",
+            "com.google.android.providers.media.module", "com.android.providers.media.module",
+            "com.google.android.photopicker", "com.android.photopicker", "com.android.mtp"
         )
 
         /** System apps that are never tolerated as a side screen of an allowed app. */
@@ -87,9 +89,9 @@ class LockAccessibilityService : AccessibilityService() {
         )
 
         /** System UI popups that must never be closed while locked (unlock screen, volume). */
-        private val BENIGN_UI = listOf("keyguard", "bouncer", "lockscreen", "biometric", "fingerprint", "volume", "toast")
+        private val BENIGN_UI = listOf("keyguard", "bouncer", "lockscreen", "biometric", "fingerprint", "volume", "toast", "gesture", "edgeback", "backpanel", "navigationbar", "navbar", "taskbar", "handle", "inputmethod", "keyboard", "headsup")
         /** System UI windows worth closing even while an allowed app is open (notification shade, quick settings, recents). */
-        private val RISKY_UI = listOf("shade", "notification", "panel", "statusbar", "quicksetting", "qspanel", "controlcenter", "recent", "overview", "assist")
+        private val RISKY_UI = listOf("notificationshade", "notificationpanel", "shadewindow", "quicksetting", "qspanel", "controlcenter", "recents", "overview")
 
         /** Debug aid: what the lock blocked last, shown on the main screen. */
         var lastBlocked: String
@@ -224,9 +226,9 @@ class LockAccessibilityService : AccessibilityService() {
                 return
             }
             if (BENIGN_UI.any { cls.contains(it) }) return
-            // Typing, the keyboard and many in-app popups make System UI report windows too. While an
-            // allowed app is open, only close the notification shade, quick settings and recents.
-            if (chainOk && RISKY_UI.none { cls.contains(it) }) return
+            // Typing, the keyboard and many in-app popups make System UI report windows too. Only close the
+            // notification shade, quick settings and recents. Plain windows like android.view.View are ignored.
+            if (RISKY_UI.none { cls.contains(it) }) return
             scheduleEnforce(1) {
                 if (SystemClock.uptimeMillis() - lastCloseAt > 1500L) {
                     lastBlocked = "$pkg / $cls"
