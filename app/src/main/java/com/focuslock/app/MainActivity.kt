@@ -82,11 +82,13 @@ class MainActivity : Activity() {
     private lateinit var lockBtn: Button
     private lateinit var allowedSummary: TextView
     private lateinit var lastBlockedView: TextView
+    private lateinit var endText: TextView
     private val presetBtns = ArrayList<Button>()
 
     private val ticker = object : Runnable {
         override fun run() {
             refreshUi()
+            if (::endText.isInitialized) refreshEndEstimate()
             handler.postDelayed(this, 1000L)
         }
     }
@@ -173,6 +175,8 @@ class MainActivity : Activity() {
         setupBox.addView(text("LOCK FOR", 12f, C.MUTED, bold = true), lp(28))
         durText = text("25 min", 44f, C.ACCENT, bold = true)
         setupBox.addView(durText, lp(4))
+        endText = text("", 15f, C.FG)
+        setupBox.addView(endText, lp(2))
 
         seek = SeekBar(this)
         seek.max = MAX_MIN / STEP - 1
@@ -310,6 +314,7 @@ class MainActivity : Activity() {
         minutes = raw.coerceIn(0, MAX_MIN)
 
         durText.text = if (minutes == 0) "0 min" else fmtDuration(minutes)
+        refreshEndEstimate()
 
         if (slider) {
             seek.progress = ((minutes + STEP / 2) / STEP - 1).coerceIn(0, seek.max)
@@ -340,6 +345,29 @@ class MainActivity : Activity() {
         lockBtn.alpha = if (ok) 1f else 0.4f
         lockBtn.text = if (ok) "Lock for " + fmtDuration(minutes) else "Set a time"
         syncing = false
+    }
+
+    /** Shows when the phone would unlock if the lock started right now. */
+    private fun refreshEndEstimate() {
+        if (minutes <= 0) {
+            endText.text = ""
+            return
+        }
+        val end = System.currentTimeMillis() + minutes * 60_000L
+        fun midnight(t: Long): Long = java.util.Calendar.getInstance().apply {
+            timeInMillis = t
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val days = Math.round((midnight(end) - midnight(System.currentTimeMillis())) / 86_400_000.0).toInt()
+        val day = when (days) {
+            0 -> "today"
+            1 -> "tomorrow"
+            else -> DateFormat.getMediumDateFormat(this).format(Date(end))
+        }
+        endText.text = "Unlocks at about " + clock(end) + ", " + day
     }
 
     private fun onFieldsEdited() {
