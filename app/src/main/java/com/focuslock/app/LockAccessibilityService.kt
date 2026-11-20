@@ -173,7 +173,8 @@ class LockAccessibilityService : AccessibilityService() {
             return
         }
         // Keyboards and permission / picker screens must work inside allowed apps.
-        if (pkg in HELPER_PACKAGES || pkg in inputMethodPackages()) return
+        if (pkg in HELPER_PACKAGES || pkg in inputMethodPackages() ||
+            pkg.contains("inputmethod") || pkg.contains("keyboard")) return
 
         // An allowed app (or a call screen) is in front: cancel any pending block and show it.
         if (pkg in allowedApps || pkg in callPackages()) {
@@ -267,7 +268,7 @@ class LockAccessibilityService : AccessibilityService() {
         cachedSystemAllowed = calls
         try {
             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            cachedIme = imm.enabledInputMethodList.map { it.packageName }.toSet()
+            cachedIme = (imm.enabledInputMethodList + imm.inputMethodList).map { it.packageName }.toSet()
         } catch (_: Exception) {
         }
     }
