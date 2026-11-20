@@ -248,6 +248,8 @@ class MainActivity : Activity() {
         setupBox.addView(pickBtn, lp(10))
         setupBox.addView(text("Phone calls always work. The apps you pick stay usable during the lock and can only be changed before it starts.", 13f, C.MUTED), lp(8))
         refreshAllowedSummary()
+        val lb = LockAccessibilityService.lastBlocked
+        if (lb.isNotEmpty()) setupBox.addView(text("Last blocked: $lb", 12f, C.MUTED), lp(14))
 
         lockBtn = button("Lock", C.ACCENT, C.INK)
         lockBtn.setOnClickListener { onLockClicked() }
