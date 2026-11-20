@@ -393,7 +393,7 @@ class MainActivity : Activity() {
         val list = ListView(this)
         list.adapter = object : BaseAdapter() {
             override fun getCount() = apps.size
-            override fun getItem(i: Int) = apps[i]
+            override fun getItem(i: Int): Any = apps[i]
             override fun getItemId(i: Int) = i.toLong()
             override fun getView(i: Int, convert: View?, parent: ViewGroup?): View {
                 val v = (convert as? CheckedTextView) ?: CheckedTextView(this@MainActivity).apply {
