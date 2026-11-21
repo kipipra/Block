@@ -53,7 +53,7 @@ class LockService : Service() {
         val end = LockAccessibilityService.lockEndTime
         // The system draws the countdown itself, so the notification never needs to be re-posted.
         return Notification.Builder(this, channelId)
-            .setContentTitle("FocusLock active")
+            .setContentTitle("FORTIS active")
             .setContentText("Your phone is locked")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)
