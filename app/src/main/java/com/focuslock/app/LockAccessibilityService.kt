@@ -12,6 +12,8 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.text.TextUtils
+import android.text.format.DateFormat
+import java.util.Date
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -65,6 +67,21 @@ class LockAccessibilityService : AccessibilityService() {
                 prefs?.edit()?.putString("allowed", value.distinct().take(MAX_ALLOWED).joinToString(","))?.apply()
             }
 
+        @Volatile
+        private var allowedRaw: String = "\u0000"
+        @Volatile
+        private var allowedCache: Set<String> = emptySet()
+
+        /** Same as allowedApps but cached, because it is read on every window event. */
+        fun allowedSet(): Set<String> {
+            val raw = prefs?.getString("allowed", "") ?: ""
+            if (raw != allowedRaw) {
+                allowedCache = raw.split(",").filter { it.isNotBlank() }.toSet()
+                allowedRaw = raw
+            }
+            return allowedCache
+        }
+
         /** System helper screens apps use for permissions, file pickers and share sheets. Never blocked. */
         private val HELPER_PACKAGES = setOf(
             "android", "com.android.permissioncontroller", "com.google.android.permissioncontroller",
@@ -105,6 +122,9 @@ class LockAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var overlay: View? = null
     private var countdown: TextView? = null
+    private var unlockLabel: TextView? = null
+    private var cachedRoot: LinearLayout? = null
+    private var cachedSig: String? = null
     private var cachedSystemAllowed: Set<String> = emptySet()
     private var cachedAt = 0L
     private var launcherPackage: String? = null
@@ -118,12 +138,16 @@ class LockAccessibilityService : AccessibilityService() {
     private val ticker = object : Runnable {
         override fun run() {
             val v = countdown ?: return
+            if (overlay == null) return
             if (!isLocked()) {
                 removeOverlay()
                 return
             }
-            v.text = remainingText()
-            handler.postDelayed(this, 1000L)
+            val t = digitsText()
+            if (v.text.toString() != t) v.text = t
+            // wake up right when the next second starts, so the digits never skip or lag
+            val ms = lockEndTime - System.currentTimeMillis()
+            handler.postDelayed(this, (ms % 1000L) + 8L)
         }
     }
 
@@ -187,7 +211,7 @@ class LockAccessibilityService : AccessibilityService() {
             pkg.contains("inputmethod") || pkg.contains("keyboard")) return
 
         // An allowed app (or a call screen) is in front: cancel any pending block and show it.
-        if (pkg in allowedApps || pkg in callPackages()) {
+        if (pkg in allowedSet() || pkg in callPackages()) {
             chainOk = true
             cancelEnforce()
             removeOverlay()
@@ -248,11 +272,15 @@ class LockAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isSystemApp(pkg: String): Boolean = try {
-        val f = packageManager.getApplicationInfo(pkg, 0).flags
-        (f and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
-    } catch (_: Exception) {
-        false
+    private val systemAppCache = HashMap<String, Boolean>()
+
+    private fun isSystemApp(pkg: String): Boolean = systemAppCache.getOrPut(pkg) {
+        try {
+            val f = packageManager.getApplicationInfo(pkg, 0).flags
+            (f and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun isCallActive(): Boolean {
@@ -315,49 +343,99 @@ class LockAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun remainingText(): String {
+    private fun digitsText(): String {
         val ms = lockEndTime - System.currentTimeMillis()
-        val totalMin = (ms / 60000L).toInt()
-        val sec = ((ms % 60000L) / 1000L).toInt()
-        return if (totalMin >= 60) {
-            val h = totalMin / 60
-            val m = totalMin % 60
-            String.format(Locale.US, "Phone is locked\n%d:%02d:%02d", h, m, sec)
+        val t = maxOf(0L, (ms + 999L) / 1000L)
+        val h = t / 3600L
+        val m = (t % 3600L) / 60L
+        val sec = t % 60L
+        return if (h > 0L) {
+            String.format(Locale.US, "%d:%02d:%02d", h, m, sec)
         } else {
-            String.format(Locale.US, "Phone is locked\n%d:%02d", totalMin, sec)
+            String.format(Locale.US, "%02d:%02d", m, sec)
         }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
 
+    /** The lock screen is built once and reused, so it appears instantly when you press Home. */
     private fun showOverlay() {
         if (overlay != null) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val sig = prefs?.getString("allowed", "") ?: ""
+        var root = cachedRoot
+        if (root == null || sig != cachedSig) {
+            root = buildOverlay()
+            cachedRoot = root
+            cachedSig = sig
+        }
+        (root.parent as? ViewGroup)?.removeView(root)
+        countdown?.text = digitsText()
+        unlockLabel?.text = "Unlocks at " + DateFormat.getTimeFormat(this).format(Date(lockEndTime))
+        root.animate().cancel()
+        root.alpha = 0f
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        )
+        try {
+            wm.addView(root, params)
+            overlay = root
+            root.animate().alpha(1f).setDuration(170L).start()
+            handler.removeCallbacks(ticker)
+            handler.post(ticker)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildOverlay(): LinearLayout {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-            setBackgroundColor(Color.parseColor("#F50B0E14"))
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            setBackgroundColor(Color.parseColor("#F70B0E14"))
         }
-        val t = TextView(this).apply {
-            text = remainingText()
+        val tag = TextView(this).apply {
+            text = "LOCKED"
             setTextColor(Color.parseColor("#E0B04F"))
-            typeface = Typeface.MONOSPACE
-            textSize = 30f
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.25f
             gravity = Gravity.CENTER
         }
-        countdown = t
-        root.addView(t)
+        root.addView(tag)
+        val digits = TextView(this).apply {
+            text = digitsText()
+            setTextColor(Color.parseColor("#EEF0F5"))
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            textSize = 58f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(4))
+        }
+        countdown = digits
+        root.addView(digits)
+        val unlock = TextView(this).apply {
+            setTextColor(Color.parseColor("#9AA4B8"))
+            textSize = 14f
+            gravity = Gravity.CENTER
+        }
+        unlockLabel = unlock
+        root.addView(unlock)
 
-        // Allowed apps (up to 6), shown as a 3 x 2 grid. Tap one to open it.
+        // Allowed apps (up to 6), shown as rounded tiles in a 3 x 2 grid. Tap one to open it.
         val apps = allowedApps.filter { packageManager.getLaunchIntentForPackage(it) != null }
         if (apps.isNotEmpty()) {
             val label = TextView(this).apply {
-                text = "Allowed apps"
+                text = "ALLOWED APPS"
                 setTextColor(Color.parseColor("#9AA4B8"))
-                textSize = 13f
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                letterSpacing = 0.15f
                 gravity = Gravity.CENTER
-                setPadding(0, dp(32), 0, dp(12))
+                setPadding(0, dp(36), 0, dp(14))
             }
             root.addView(label)
             for (row in apps.chunked(3)) {
@@ -369,21 +447,7 @@ class LockAccessibilityService : AccessibilityService() {
                 root.addView(r)
             }
         }
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        )
-        try {
-            wm.addView(root, params)
-            overlay = root
-            handler.post(ticker)
-        } catch (_: Exception) {
-            countdown = null
-        }
+        return root
     }
 
     private fun appCell(pkg: String): View {
@@ -391,13 +455,17 @@ class LockAccessibilityService : AccessibilityService() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = withRipple(roundedDrawable(Color.TRANSPARENT, dp(20)), dp(20))
         }
-        val icon = ImageView(this)
+        val icon = ImageView(this).apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = roundedDrawable(Color.parseColor("#232D40"), dp(20))
+        }
         try {
             icon.setImageDrawable(packageManager.getApplicationIcon(pkg))
         } catch (_: Exception) {
         }
-        cell.addView(icon, LinearLayout.LayoutParams(dp(56), dp(56)))
+        cell.addView(icon, LinearLayout.LayoutParams(dp(68), dp(68)))
         val name = TextView(this).apply {
             text = try {
                 packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0))
@@ -409,8 +477,10 @@ class LockAccessibilityService : AccessibilityService() {
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(6), 0, 0)
         }
         cell.addView(name, LinearLayout.LayoutParams(dp(88), ViewGroup.LayoutParams.WRAP_CONTENT))
+        cell.pressable()
         cell.setOnClickListener { launchAllowed(pkg) }
         return cell
     }
@@ -435,7 +505,6 @@ class LockAccessibilityService : AccessibilityService() {
             try { (getSystemService(WINDOW_SERVICE) as WindowManager).removeView(it) } catch (_: Exception) {}
         }
         overlay = null
-        countdown = null
         handler.removeCallbacks(ticker)
     }
 
