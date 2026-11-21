@@ -59,18 +59,18 @@ private const val MATCH = -1
 private const val WRAP = -2
 
 private object C {
-    val BG: Int = Color.parseColor("#0B0E14")
-    val SURFACE: Int = Color.parseColor("#131925")
-    val SURFACE_HI: Int = Color.parseColor("#1A2233")
-    val SURFACE2: Int = Color.parseColor("#232D40")
-    val LINE: Int = Color.parseColor("#2B3446")
-    val FG: Int = Color.parseColor("#EEF0F5")
-    val MUTED: Int = Color.parseColor("#9AA4B8")
-    val ACCENT: Int = Color.parseColor("#E0B04F")
-    val ACCENT_HI: Int = Color.parseColor("#F2C76B")
-    val INK: Int = Color.parseColor("#1A1305")
-    val DANGER: Int = Color.parseColor("#EF8272")
-    val OK: Int = Color.parseColor("#6FC79C")
+    val BG: Int = Color.parseColor("#03070A")
+    val SURFACE: Int = Color.parseColor("#0A131B")
+    val SURFACE_HI: Int = Color.parseColor("#0F1C27")
+    val SURFACE2: Int = Color.parseColor("#14252F")
+    val LINE: Int = Color.parseColor("#1C3441")
+    val FG: Int = Color.parseColor("#E4F7FA")
+    val MUTED: Int = Color.parseColor("#8FA9B3")
+    val ACCENT: Int = Color.parseColor("#3CD8EC")
+    val ACCENT_HI: Int = Color.parseColor("#8CF1FF")
+    val INK: Int = Color.parseColor("#021317")
+    val DANGER: Int = Color.parseColor("#FF7A6B")
+    val OK: Int = Color.parseColor("#6FE3B5")
 }
 
 class MainActivity : Activity() {
@@ -181,7 +181,13 @@ class MainActivity : Activity() {
 
     private fun buildUi(): View {
         root = ScrollView(this)
-        root.setBackgroundColor(C.BG)
+        // deep dark background with a soft cyan glow at the top, like the logo
+        val glowBg = GradientDrawable()
+        glowBg.setGradientType(GradientDrawable.RADIAL_GRADIENT)
+        glowBg.setGradientCenter(0.5f, 0.0f)
+        glowBg.setGradientRadius(dp(480).toFloat())
+        glowBg.setColors(intArrayOf(Color.argb(64, 60, 216, 236), Color.argb(0, 60, 216, 236)))
+        root.background = android.graphics.drawable.LayerDrawable(arrayOf<Drawable>(ColorDrawable(C.BG), glowBg))
         root.isFillViewport = true
         root.isVerticalScrollBarEnabled = false
         root.isFocusableInTouchMode = true
@@ -196,7 +202,21 @@ class MainActivity : Activity() {
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
-        header.addView(text("FocusLock", 30f, C.FG, bold = true), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val logo = ImageView(this)
+        logo.setImageResource(R.drawable.logo)
+        logo.scaleType = ImageView.ScaleType.FIT_CENTER
+        header.addView(logo, LinearLayout.LayoutParams(dp(56), dp(56)))
+        val titles = LinearLayout(this)
+        titles.orientation = LinearLayout.VERTICAL
+        val nameText = text("FORTIS", 26f, C.FG, bold = true)
+        nameText.letterSpacing = 0.16f
+        val tagText = text("FOCUS. PAUSE. ACHIEVE.", 10.5f, C.ACCENT)
+        tagText.letterSpacing = 0.18f
+        titles.addView(nameText)
+        titles.addView(tagText)
+        val titlesLp = LinearLayout.LayoutParams(0, WRAP, 1f)
+        titlesLp.leftMargin = dp(8)
+        header.addView(titles, titlesLp)
         permPill = text("", 12f, C.OK, bold = true)
         permPill.setPadding(dp(12), dp(7), dp(12), dp(7))
         permPill.setOnClickListener {
@@ -213,7 +233,7 @@ class MainActivity : Activity() {
         permCard.addView(text("Lock permission is off", 16f, C.DANGER, bold = true), lp(0))
         permCard.addView(
             text(
-                "Open Accessibility settings, tap FocusLock and switch it on. If the switch is greyed out: Settings, Apps, FocusLock, three dots at the top right, Allow restricted settings.",
+                "Open Accessibility settings, tap FORTIS and switch it on. If the switch is greyed out: Settings, Apps, FORTIS, three dots at the top right, Allow restricted settings.",
                 13f, C.MUTED
             ), lp(8)
         )
@@ -228,7 +248,11 @@ class MainActivity : Activity() {
         lockedBox.setPadding(dp(16), dp(28), dp(16), dp(28))
         lockedBox.visibility = View.GONE
         ring = RingView(this)
-        lockedBox.addView(ring, LinearLayout.LayoutParams(dp(260), dp(260)))
+        val lockLogo = ImageView(this)
+        lockLogo.setImageResource(R.drawable.logo)
+        lockLogo.scaleType = ImageView.ScaleType.FIT_CENTER
+        lockedBox.addView(lockLogo, LinearLayout.LayoutParams(dp(76), dp(76)))
+        lockedBox.addView(ring, LinearLayout.LayoutParams(dp(250), dp(250)))
         lockedUntil = text("", 16f, C.FG, bold = true, center = true)
         lockedBox.addView(lockedUntil, lp(14))
         lockedBox.addView(text("This lock cannot be cancelled. Come back when the timer ends.", 13f, C.MUTED, center = true), lp(10))
@@ -714,7 +738,7 @@ class MainActivity : Activity() {
         val icon = ImageView(this@MainActivity)
         val label = TextView(this@MainActivity)
         val check = TextView(this@MainActivity)
-        private val bgOn = withRipple(roundedDrawable(Color.argb(30, 224, 176, 79), dp(14)), dp(14))
+        private val bgOn = withRipple(roundedDrawable(Color.argb(34, 60, 216, 236), dp(14)), dp(14))
         private val bgOff = withRipple(roundedDrawable(Color.TRANSPARENT, dp(14)), dp(14))
         private val checkOn = roundedDrawable(C.ACCENT, dp(13))
         private val checkOff = roundedDrawable(Color.TRANSPARENT, dp(13), C.LINE, dp(2))
@@ -1065,7 +1089,7 @@ private class RingView(ctx: Context) : View(ctx) {
         track.color = C.SURFACE2
         glow.style = Paint.Style.STROKE
         glow.strokeCap = Paint.Cap.ROUND
-        glow.color = Color.argb(44, 224, 176, 79)
+        glow.color = Color.argb(48, 60, 216, 236)
         arc.style = Paint.Style.STROKE
         arc.strokeCap = Paint.Cap.ROUND
         arc.color = C.ACCENT
