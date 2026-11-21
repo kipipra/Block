@@ -22,8 +22,8 @@ class LockService : Service() {
                 onLockFinished()
                 return
             }
-            updateNotification()
-            handler.postDelayed(this, 1000L)
+            val left = LockAccessibilityService.lockEndTime - System.currentTimeMillis()
+            handler.postDelayed(this, left.coerceIn(50L, 1000L))
         }
     }
 
@@ -50,14 +50,18 @@ class LockService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        val ms = (LockAccessibilityService.lockEndTime - System.currentTimeMillis()).coerceAtLeast(0)
-        val min = ms / 60000
-        val sec = (ms % 60000) / 1000
+        val end = LockAccessibilityService.lockEndTime
+        // The system draws the countdown itself, so the notification never needs to be re-posted.
         return Notification.Builder(this, channelId)
             .setContentTitle("FocusLock active")
-            .setContentText(String.format(Locale.US, "Locked for %d:%02d more", min, sec))
+            .setContentText("Your phone is locked")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(true)
+            .setWhen(end)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
             .build()
     }
 
