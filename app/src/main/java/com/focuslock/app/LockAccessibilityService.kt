@@ -396,11 +396,16 @@ class LockAccessibilityService : AccessibilityService() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(20), dp(20), dp(20), dp(20))
-            setBackgroundColor(Color.parseColor("#F70B0E14"))
+            setBackgroundColor(Color.parseColor("#F703070A"))
         }
+        val brand = ImageView(this).apply {
+            setImageResource(R.drawable.logo)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        root.addView(brand, LinearLayout.LayoutParams(dp(110), dp(110)))
         val tag = TextView(this).apply {
             text = "LOCKED"
-            setTextColor(Color.parseColor("#E0B04F"))
+            setTextColor(Color.parseColor("#3CD8EC"))
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.25f
@@ -409,7 +414,7 @@ class LockAccessibilityService : AccessibilityService() {
         root.addView(tag)
         val digits = TextView(this).apply {
             text = digitsText()
-            setTextColor(Color.parseColor("#EEF0F5"))
+            setTextColor(Color.parseColor("#E4F7FA"))
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             textSize = 58f
             gravity = Gravity.CENTER
@@ -418,7 +423,7 @@ class LockAccessibilityService : AccessibilityService() {
         countdown = digits
         root.addView(digits)
         val unlock = TextView(this).apply {
-            setTextColor(Color.parseColor("#9AA4B8"))
+            setTextColor(Color.parseColor("#8FA9B3"))
             textSize = 14f
             gravity = Gravity.CENTER
         }
@@ -430,7 +435,7 @@ class LockAccessibilityService : AccessibilityService() {
         if (apps.isNotEmpty()) {
             val label = TextView(this).apply {
                 text = "ALLOWED APPS"
-                setTextColor(Color.parseColor("#9AA4B8"))
+                setTextColor(Color.parseColor("#8FA9B3"))
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 letterSpacing = 0.15f
@@ -459,7 +464,7 @@ class LockAccessibilityService : AccessibilityService() {
         }
         val icon = ImageView(this).apply {
             setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = roundedDrawable(Color.parseColor("#232D40"), dp(20))
+            background = roundedDrawable(Color.parseColor("#14252F"), dp(20))
         }
         try {
             icon.setImageDrawable(packageManager.getApplicationIcon(pkg))
@@ -472,7 +477,7 @@ class LockAccessibilityService : AccessibilityService() {
             } catch (_: Exception) {
                 pkg
             }
-            setTextColor(Color.parseColor("#EEF0F5"))
+            setTextColor(Color.parseColor("#E4F7FA"))
             textSize = 12f
             gravity = Gravity.CENTER
             maxLines = 1
