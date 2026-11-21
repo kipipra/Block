@@ -248,11 +248,7 @@ class MainActivity : Activity() {
         lockedBox.setPadding(dp(16), dp(28), dp(16), dp(28))
         lockedBox.visibility = View.GONE
         ring = RingView(this)
-        val lockLogo = ImageView(this)
-        lockLogo.setImageResource(R.drawable.logo)
-        lockLogo.scaleType = ImageView.ScaleType.FIT_CENTER
-        lockedBox.addView(lockLogo, LinearLayout.LayoutParams(dp(76), dp(76)))
-        lockedBox.addView(ring, LinearLayout.LayoutParams(dp(250), dp(250)))
+        lockedBox.addView(ring, LinearLayout.LayoutParams(dp(260), dp(260)))
         lockedUntil = text("", 16f, C.FG, bold = true, center = true)
         lockedBox.addView(lockedUntil, lp(14))
         lockedBox.addView(text("This lock cannot be cancelled. Come back when the timer ends.", 13f, C.MUTED, center = true), lp(10))
