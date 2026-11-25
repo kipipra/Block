@@ -58,6 +58,18 @@ class LockAccessibilityService : AccessibilityService() {
 
         fun isLocked(): Boolean = lockEndTime > System.currentTimeMillis()
 
+        @Volatile
+        var kickRequested = false
+
+        @Volatile
+        private var instance: LockAccessibilityService? = null
+
+        /** A routine just started a lock: send the person home so the lock takes hold at once. */
+        fun requestKick() {
+            kickRequested = true
+            instance?.kickNow()
+        }
+
         const val MAX_ALLOWED = 6
 
         /** Package names of apps the user may open while locked (max 6). Edited from the main screen before locking. */
@@ -120,6 +132,28 @@ class LockAccessibilityService : AccessibilityService() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+
+    // Routines: check every 15 seconds that a due routine has really started its lock.
+    private val routineTick = object : Runnable {
+        override fun run() {
+            Routines.reconcile(this@LockAccessibilityService)
+            applyKick()
+            handler.postDelayed(this, 15_000L)
+        }
+    }
+
+    fun kickNow() {
+        handler.post { applyKick() }
+    }
+
+    private fun applyKick() {
+        if (!kickRequested) return
+        kickRequested = false
+        if (!isLocked()) return
+        chainOk = false
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        showOverlay()
+    }
     private var overlay: View? = null
     private var countdown: TextView? = null
     private var unlockLabel: TextView? = null
@@ -160,6 +194,11 @@ class LockAccessibilityService : AccessibilityService() {
             notificationTimeout = 0
         }
         launcherPackage = currentLauncherPackage()
+        instance = this
+        Routines.reconcile(this)
+        Routines.reschedule(this)
+        handler.removeCallbacks(routineTick)
+        handler.postDelayed(routineTick, 15_000L)
         if (isLocked()) {
             // Android starts this service again after a restart, so the lock picks up where it was left.
             showOverlay()
@@ -200,6 +239,7 @@ class LockAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!isLocked()) return
+        if (kickRequested) applyKick()
         val pkg = event?.packageName?.toString() ?: return
         if (pkg == packageName) {
             cancelEnforce()
@@ -320,6 +360,12 @@ class LockAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        instance = null
+        handler.removeCallbacks(routineTick)
+        return super.onUnbind(intent)
+    }
 
     private fun looksLikePowerMenu(cls: String, event: AccessibilityEvent): Boolean {
         if (POWER_CLASS.any { cls.contains(it) }) return true
