@@ -32,6 +32,7 @@ class LockService : Service() {
         LockAccessibilityService.init(this)
         createChannel()
         startForeground(notifyId, buildNotification())
+        handler.removeCallbacks(ticker)
         handler.post(ticker)
         return START_STICKY
     }
@@ -39,6 +40,14 @@ class LockService : Service() {
     private fun onLockFinished() {
         handler.removeCallbacks(ticker)
         LockAccessibilityService.lockEndTime = 0L
+        // Back-to-back routines: if another one is due right now, carry straight on.
+        if (Routines.reconcile(this, kick = false)) {
+            startForeground(notifyId, buildNotification())
+            handler.removeCallbacks(ticker)
+            handler.post(ticker)
+            return
+        }
+        Routines.reschedule(this)
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(notifyId)
         stopSelf()
@@ -54,7 +63,10 @@ class LockService : Service() {
         // The system draws the countdown itself, so the notification never needs to be re-posted.
         return Notification.Builder(this, channelId)
             .setContentTitle("FORTIS active")
-            .setContentText("Your phone is locked")
+            .setContentText(
+                getSharedPreferences("focuslock_ui", MODE_PRIVATE).getString("lockLabel", "").orEmpty()
+                    .let { if (it.isEmpty()) "Your phone is locked" else "Routine: $it" }
+            )
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
