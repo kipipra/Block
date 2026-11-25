@@ -58,7 +58,7 @@ import java.util.concurrent.Executors
 private const val MATCH = -1
 private const val WRAP = -2
 
-private object C {
+internal object C {
     val BG: Int = Color.parseColor("#03070A")
     val SURFACE: Int = Color.parseColor("#0A131B")
     val SURFACE_HI: Int = Color.parseColor("#0F1C27")
@@ -108,6 +108,8 @@ class MainActivity : Activity() {
     private lateinit var lockedBox: LinearLayout
     private lateinit var ring: RingView
     private lateinit var lockedUntil: TextView
+    private lateinit var lockedRoutine: TextView
+    private lateinit var routineSummary: TextView
     private lateinit var durText: TextView
     private lateinit var endText: TextView
     private lateinit var helper: TextView
@@ -128,6 +130,7 @@ class MainActivity : Activity() {
                 handler.postDelayed(this, left.coerceIn(50L, 1000L))
             } else {
                 refreshEndEstimate()
+                refreshRoutineSummary()
                 handler.postDelayed(this, 15_000L)
             }
         }
@@ -154,6 +157,9 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        Routines.reconcile(this)
+        Routines.reschedule(this)
+        refreshRoutineSummary()
         refreshPermission()
         refreshLastBlocked()
         refreshSlots()
@@ -249,6 +255,10 @@ class MainActivity : Activity() {
         lockedBox.visibility = View.GONE
         ring = RingView(this)
         lockedBox.addView(ring, LinearLayout.LayoutParams(dp(260), dp(260)))
+        lockedRoutine = text("", 11.5f, C.ACCENT, bold = true, center = true)
+        lockedRoutine.letterSpacing = 0.14f
+        lockedRoutine.visibility = View.GONE
+        lockedBox.addView(lockedRoutine, lp(12))
         lockedUntil = text("", 16f, C.FG, bold = true, center = true)
         lockedBox.addView(lockedUntil, lp(14))
         lockedBox.addView(text("This lock cannot be cancelled. Come back when the timer ends.", 13f, C.MUTED, center = true), lp(10))
@@ -333,6 +343,28 @@ class MainActivity : Activity() {
         }
         hero.addView(presets, lp(16))
         setupBox.addView(hero, lp(20))
+
+        // routines card: opens the automatic locks screen
+        val rc = LinearLayout(this)
+        rc.orientation = LinearLayout.HORIZONTAL
+        rc.gravity = Gravity.CENTER_VERTICAL
+        rc.setPadding(dp(18), dp(16), dp(18), dp(16))
+        val rbg = gradientDrawable(C.SURFACE_HI, C.SURFACE, dp(22))
+        rbg.setStroke(dp(1), Color.argb(110, 60, 216, 236))
+        rc.background = withRipple(rbg, dp(22))
+        val rcText = LinearLayout(this)
+        rcText.orientation = LinearLayout.VERTICAL
+        rcText.addView(label("ROUTINES"))
+        routineSummary = text("", 15f, C.FG, bold = true)
+        rcText.addView(routineSummary, lp(4))
+        rc.addView(rcText, LinearLayout.LayoutParams(0, WRAP, 1f))
+        rc.addView(text("\u203A", 32f, C.ACCENT, bold = true), LinearLayout.LayoutParams(WRAP, WRAP))
+        rc.pressable(0.985f)
+        rc.setOnClickListener {
+            dropFocus()
+            startActivity(Intent(this, RoutinesActivity::class.java))
+        }
+        setupBox.addView(rc, lp(14))
 
         // exact time card
         val tc = card()
@@ -681,6 +713,10 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun refreshRoutineSummary() {
+        routineSummary.text = Routines.summary(this)
+    }
+
     private fun refreshLastBlocked() {
         val lb = LockAccessibilityService.lastBlocked
         lastBlockedView.text = "Last blocked: " + (if (lb.isEmpty()) "nothing yet" else lb)
@@ -921,7 +957,7 @@ class MainActivity : Activity() {
     private fun startLock() {
         if (LockAccessibilityService.isLocked() || minutes <= 0) return
         val now = System.currentTimeMillis()
-        prefs.edit().putInt("minutes", minutes).putLong("lockStart", now).apply()
+        prefs.edit().putInt("minutes", minutes).putLong("lockStart", now).putString("lockLabel", "").apply()
         LockAccessibilityService.lockEndTime = now + minutes * 60_000L
         startForegroundService(Intent(this, LockService::class.java))
         handler.removeCallbacks(ticker)
@@ -951,7 +987,7 @@ class MainActivity : Activity() {
     private fun lockStartFor(end: Long): Long {
         val s = prefs.getLong("lockStart", 0L)
         val total = end - s
-        if (s > 0L && total > 0L && total <= MAX_MIN * 60_000L + 60_000L) return s
+        if (s > 0L && total > 0L && total <= 25L * 3_600_000L) return s
         val now = System.currentTimeMillis()
         prefs.edit().putLong("lockStart", now).apply()
         return now
@@ -971,6 +1007,9 @@ class MainActivity : Activity() {
             ring.startMs = lockStartFor(end)
             ring.endMs = end
             lockedUntil.text = "Unlocks at " + whenLabel(end)
+            val lab = prefs.getString("lockLabel", "") ?: ""
+            lockedRoutine.visibility = if (lab.isEmpty()) View.GONE else View.VISIBLE
+            lockedRoutine.text = "ROUTINE  \u00B7  " + lab.uppercase(Locale.ROOT)
         }
         refreshPermission()
         updateBreathing()
